@@ -11,8 +11,7 @@ A Plotly Dash dashboard for One for the World (OFTW) that visualizes key metrics
 - Pledge Performance Tracking
 
 ## Setup
-
-2. Install dependencies:
+1. Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
@@ -65,13 +64,3 @@ http://127.0.0.1:8050/
    - Total Number of Active Donors
    - Total Number of Active Pledges
    - Chapter ARR by Type
-
-## Color Scheme
-
-- Primary (Blue): #007BFF
-- Neutral (Gray): #F8F9FA
-- Text (Charcoal): #343A40
-- Secondary (Teal): #20C997
-- Accent (Orange): #FD7E14
-- Success (Green): #28A745
-- Danger (Red): #DC3545 
