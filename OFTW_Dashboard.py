@@ -2790,4 +2790,4 @@ def get_ai_insights(n_clicks, question, current_fiscal_year):
 
 
 if __name__ == '__main__':
-    app.run(debug=False)
+    app.run(host="0.0.0.0",port=8080,debug=False)
