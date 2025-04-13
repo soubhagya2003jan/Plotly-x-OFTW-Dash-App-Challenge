@@ -88,14 +88,3 @@ To The IP Adress In The Terminal
 ├── requirements.txt
 └── README.md
 ```
-
-## Features Implemented
-
-1. Objective & Key Results Page:
-   - Money Moved (Monthly + Total FYTD)
-   - Counterfactual Money Moved
-   - Active Annualized Run Rate by Channel
-   - Pledge Attrition Rate
-   - Total Number of Active Donors
-   - Total Number of Active Pledges
-   - Chapter ARR by Type
