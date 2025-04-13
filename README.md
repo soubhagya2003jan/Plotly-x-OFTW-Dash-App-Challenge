@@ -30,7 +30,7 @@ python OFTWDashboard.py
 
 3. Open your browser and navigate to:
 ```
-http://127.0.0.1:8050/
+To The IP Adress In The Terminal
 ```
 
 ## Directory Structure
