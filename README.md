@@ -1,5 +1,7 @@
 # OFTW Dashboard
 ![OFTW_Logo2](https://github.com/user-attachments/assets/1c7e5d59-76a2-4802-bd48-2920c54359ff)
+
+## Dashboard
 A Plotly Dash dashboard for One for the World (OFTW) that visualizes key metrics and performance indicators.
 
 ## Description
