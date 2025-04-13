@@ -8,6 +8,18 @@ A Plotly Dash dashboard for One for the World (OFTW) that visualizes key metrics
 
 The OFTW Dashboard is an interactive tool built with Plotly Dash that helps visualize key metrics and performance indicators for One for the World (OFTW). This dashboard allows users to explore data on donations, pledges, and the overall impact of the organization’s campaigns. The aim is to provide insights that aid in the organization's strategic decision-making and performance tracking of OFTW.
 
+## Tools Used
+- VSCODE
+- Python
+- HTML
+- CSS
+- Bootswatch Themes For Styling
+- Jupyter Notebook
+- Pandas
+- Plotly
+- Dash
+- ChatGPT
+
 ## Features
 
 This Dashboard Includes Several Pages
