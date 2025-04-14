@@ -1619,14 +1619,16 @@ app.layout = html.Div(
                                                 html.H4("AI Analysis"),
                                                 html.Div(id='ai-response',
                                                          style={
-                                                             'whiteSpace':
-                                                             'pre-wrap',
+                                                             'whiteSpace': 'pre-wrap',
                                                              'fontFamily': 'Arial, sans-serif',
-                                                             'lineHeight': '1.6',
-                                                             'padding': '15px',
+                                                             'lineHeight': '1.8',
+                                                             'padding': '20px',
                                                              'backgroundColor': '#f8f9fa',
-                                                             'borderRadius': '5px',
-                                                             'fontSize': '14px'
+                                                             'borderRadius': '8px',
+                                                             'fontSize': '15px',
+                                                             'color': '#2c3e50',
+                                                             'boxShadow': '0 2px 4px rgba(0,0,0,0.1)',
+                                                             'margin': '10px 0'
                                                          })
                                             ])
                                         ])
@@ -2795,7 +2797,10 @@ def get_ai_insights(n_clicks, question, current_fiscal_year):
 
         # Return the response text with formatting
         if response.text:
-            return response.text.replace('\n', '<br>')
+            formatted_text = response.text.replace('**', '').replace('*', '•')  # Convert markdown to bullet points
+            formatted_text = formatted_text.replace('<br><br>', '\n\n')  # Convert double breaks to newlines
+            formatted_text = formatted_text.replace('<br>', '\n')  # Convert single breaks to newlines
+            return formatted_text
         else:
             return "No response generated. Please try rephrasing your question."
 
@@ -2816,6 +2821,7 @@ def analyze_dashboard_metrics(question, df_payments, df_pledges, fiscal_year):
     # You can use libraries like spaCy or transformers for NLP tasks.
     # This is a placeholder, replace with actual analysis.
     return f"Analysis for question '{question}' based on context:\n{context}"
+
 
 
 if __name__ == '__main__':
