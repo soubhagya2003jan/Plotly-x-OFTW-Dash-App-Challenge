@@ -2818,6 +2818,5 @@ def analyze_dashboard_metrics(question, df_payments, df_pledges, fiscal_year):
     return f"Analysis for question '{question}' based on context:\n{context}"
 
 
-
 if __name__ == '__main__':
-    app.run(debug=False, host='0.0.0.0', port=int(os.environ.get("PORT", 8080)))
+    app.run(host="0.0.0.0",port=8080,debug=False)
