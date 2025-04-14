@@ -12,38 +12,47 @@ from plotly.subplots import make_subplots
 from dotenv import load_dotenv
 try:
     import google.generativeai as genai
-    
-    
+
     genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-    
-    
+
     generation_config = {
         "temperature": 0.9,
         "top_p": 1,
         "top_k": 1,
         "max_output_tokens": 2048,
     }
-    
+
     safety_settings = [
-        {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-        {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-        {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-        {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
+        {
+            "category": "HARM_CATEGORY_HARASSMENT",
+            "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+        },
+        {
+            "category": "HARM_CATEGORY_HATE_SPEECH",
+            "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+        },
+        {
+            "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+            "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+        },
+        {
+            "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+            "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+        },
     ]
 except ImportError:
-    print("Warning: google-generativeai package not installed. AI insights feature will not be available.")
+    print(
+        "Warning: google-generativeai package not installed. AI insights feature will not be available."
+    )
 
-
-app = Dash(
-    __name__,
-    external_stylesheets=[
-        dbc.themes.FLATLY,
-        'https://use.fontawesome.com/releases/v5.15.4/css/all.css'
-    ],
-    assets_folder='Assets',
-    suppress_callback_exceptions=True,
-    show_undo_redo=False
-)
+app = Dash(__name__,
+           external_stylesheets=[
+               dbc.themes.FLATLY,
+               'https://use.fontawesome.com/releases/v5.15.4/css/all.css'
+           ],
+           assets_folder='Assets',
+           suppress_callback_exceptions=True,
+           show_undo_redo=False)
 
 COLORS = {
     'primary': '#007BFF',  # Blue
@@ -54,7 +63,6 @@ COLORS = {
     'success': '#28A745',  # Green
     'danger': '#DC3545'  # Red
 }
-
 
 card_style = {'height': '200px', 'margin-bottom': '20px'}
 card_header_style = {
@@ -72,7 +80,6 @@ card_body_style = {
     'height': '150px',
     'padding': '20px'
 }
-
 
 
 def get_fiscal_year(date):
@@ -109,13 +116,12 @@ def calculate_money_moved(df, fiscal_year=None):
 
 def calculate_counterfactual_mm(df, fiscal_year=None):
     """Calculate counterfactual money moved"""
-    
+
     filtered_df = df[~df['portfolio'].isin([
         'One for the World Discretionary Fund',
         'One for the World Operating Costs'
     ])]
 
-   
     filtered_df['counterfactual_amount'] = filtered_df[
         'amount_usd'] * filtered_df['counterfactuality']
 
@@ -130,27 +136,20 @@ def calculate_counterfactual_mm(df, fiscal_year=None):
     ) if not filtered_df.empty else 0
 
 
-def calculate_arr_by_channel(df):
-    """Calculate Annualized Run Rate by channel for active donors"""
+def calculate_arr_by_channel(df, fiscal_year=None):
+    """Calculate Yearly Annualized Run Rate by channel for active donors"""
+    if fiscal_year:
+        start_date, end_date = get_fiscal_year_range(fiscal_year)
+        df = df[(df['pledge_starts_at'] >= start_date)
+                & (df['pledge_starts_at'] <= end_date)]
+
     active_pledges = df[df['pledge_status'] == 'Active donor'].copy()
 
-    
-    active_pledges['multiplier'] = active_pledges['frequency'].map({
-        'monthly':
-        12,
-        'quarterly':
-        4,
-        'annually':
-        1
-    }).fillna(1)  
+    # Monthly amounts are already monthly, multiply by 12 for yearly
+    active_pledges['annual_value'] = active_pledges['amount_usd'] * 12
 
-    
-    active_pledges['annual_value'] = active_pledges[
-        'amount_usd'] * active_pledges['multiplier']
-
-    
-    return active_pledges.groupby(
-        'donor_chapter')['annual_value'].sum().reset_index()
+    total_arr = active_pledges['annual_value'].sum()
+    return total_arr
 
 
 def calculate_pledge_attrition_rate(df):
@@ -173,37 +172,29 @@ def count_active_pledges(df):
     return df[df['pledge_status'] == 'Active donor']['pledge_id'].nunique()
 
 
-def calculate_chapter_arr(df):
-    """Calculate ARR by chapter type"""
-    
+def calculate_chapter_arr(df, fiscal_year=None):
+    """Calculate monthly ARR by chapter type"""
+
+    if fiscal_year:
+        start_date, end_date = get_fiscal_year_range(fiscal_year)
+        df = df[(df['pledge_starts_at'] >= start_date)
+                & (df['pledge_starts_at'] <= end_date)]
+
     active_pledges = df[df['pledge_status'] == 'Active donor'].copy()
 
-    
-    active_pledges['multiplier'] = active_pledges['frequency'].map({
-        'monthly':
-        12,
-        'quarterly':
-        4,
-        'annually':
-        1,
-        'One-Time':
-        1  
-    }).fillna(1)
+    # Just use the monthly amount directly
+    active_pledges['monthly_value'] = active_pledges['amount_usd']
 
-    
-    active_pledges['annual_value'] = active_pledges[
-        'amount_usd'] * active_pledges['multiplier']
+    # Multiply by 12 to get annual value
+    active_pledges['annual_value'] = active_pledges['monthly_value'] * 12
 
-    
     chapter_arr = active_pledges.groupby(
         'chapter_type')['annual_value'].sum().reset_index()
 
-    
     if chapter_arr.empty:
         chapter_arr = pd.DataFrame({'chapter_type': [], 'annual_value': []})
 
     return chapter_arr
-
 
 
 df_payments_converted = pd.DataFrame()
@@ -362,10 +353,8 @@ except Exception as e:
     print(f"Error loading or processing data: {e}")
     # Keep the defaults for global variables
 
-
 app.layout = html.Div(
     [
-        
         html.Div([
             html.Div(
                 [
@@ -461,11 +450,8 @@ app.layout = html.Div(
                      'backgroundColor': '#007bff',
                      'borderBottom': '1px solid #007bff'
                  }),
-
-        
         html.Div(
             [
-                
                 html.Div(
                     [
                         # Overview Page
@@ -923,7 +909,7 @@ app.layout = html.Div(
                                                         'textAlign': 'center',
                                                         'margin': '10px 0'
                                                     }),
-                                                html.Div([
+                                                                               html.Div([
                                                     html.Span(
                                                         "Target For 2025: $1.8M",
                                                         style={
@@ -979,7 +965,7 @@ app.layout = html.Div(
                                     dbc.Col([
                                         dbc.Card([
                                             dbc.CardHeader(
-                                                "Active ARR by Channel",
+                                                "Active ARR Yearly",
                                                 style=card_header_style),
                                             dbc.CardBody([
                                                 html.Div(
@@ -1635,8 +1621,12 @@ app.layout = html.Div(
                                                          style={
                                                              'whiteSpace':
                                                              'pre-wrap',
-                                                             'fontFamily':
-                                                             'monospace'
+                                                             'fontFamily': 'Arial, sans-serif',
+                                                             'lineHeight': '1.6',
+                                                             'padding': '15px',
+                                                             'backgroundColor': '#f8f9fa',
+                                                             'borderRadius': '5px',
+                                                             'fontSize': '14px'
                                                          })
                                             ])
                                         ])
@@ -1646,15 +1636,28 @@ app.layout = html.Div(
 
                                 # Example Questions
                                 html.Div([
-                                    html.H5("Example Questions:", className="mt-3"),
+                                    html.H5("Example Questions:",
+                                            className="mt-3"),
                                     html.Ul([
-                                        html.Li("What is our current attrition rate and how does it compare to our target?"),
-                                        html.Li("How has money moved changed over the available fiscal years?"),
-                                        html.Li("What are the key trends in donor engagement?"),
-                                        html.Li("Which chapters are performing best in terms of ARR?"),
-                                        html.Li("What insights can you provide about our pledge performance?")
-                                    ], style={'color': 'gray'})
-                                ], id='example-questions')
+                                        html.
+                                        Li("What is our current attrition rate and how does it compare to our target?"
+                                           ),
+                                        html.
+                                        Li("How has money moved changed over the available fiscal years?"
+                                           ),
+                                        html.
+                                        Li("What are the key trends in donor engagement?"
+                                           ),
+                                        html.
+                                        Li("Which chapters are performing best in terms of ARR?"
+                                           ),
+                                        html.
+                                        Li("What insights can you provide about our pledge performance?"
+                                           )
+                                    ],
+                                            style={'color': 'gray'})
+                                ],
+                                         id='example-questions')
                             ])
                     ],
                     style={
@@ -1978,24 +1981,22 @@ def update_counterfactual_mm(fiscal_year):
 @app.callback(Output("active-arr-kpi", "children"),
               [Input("fiscal-year-dropdown", "value")])
 def update_active_arr(fiscal_year):
-    active_pledges = df_pledges_converted[df_pledges_converted['pledge_status']
-                                          == 'Active donor'].copy()
+    if not fiscal_year:
+        return "No data"
 
-    # Convert frequency to multiplier
-    active_pledges['multiplier'] = active_pledges['frequency'].map({
-        'monthly':
-        12,
-        'quarterly':
-        4,
-        'annually':
-        1
-    }).fillna(1)
+    # Get fiscal year date range
+    start_date, end_date = get_fiscal_year_range(fiscal_year)
 
-    # Calculate annual value
-    active_pledges['annual_value'] = active_pledges[
-        'amount_usd'] * active_pledges['multiplier']
+    # Filter pledges for the fiscal year and get active donors
+    active_pledges = df_pledges_converted[
+        (df_pledges_converted['pledge_status'] == 'Active donor')
+        & (df_pledges_converted['pledge_starts_at'] >= start_date) &
+        (df_pledges_converted['pledge_starts_at'] <= end_date)].copy()
 
-    # Total ARR
+    # Calculate yearly value (monthly amount * 12)
+    active_pledges['annual_value'] = active_pledges['amount_usd'] * 12
+
+    # Sum up total ARR
     total_arr = active_pledges['annual_value'].sum()
 
     return f"${total_arr:,.2f}"
@@ -2004,21 +2005,42 @@ def update_active_arr(fiscal_year):
 @app.callback(Output("attrition-kpi", "children"),
               [Input("fiscal-year-dropdown", "value")])
 def update_attrition_rate(fiscal_year):
-    attrition_rate = calculate_pledge_attrition_rate(df_pledges_converted)
+    if not fiscal_year:
+        return "No data"
+
+    start_date, end_date = get_fiscal_year_range(fiscal_year)
+    filtered_pledges = df_pledges_converted[
+        (df_pledges_converted['pledge_starts_at'] >= start_date)
+        & (df_pledges_converted['pledge_starts_at'] <= end_date)]
+    attrition_rate = calculate_pledge_attrition_rate(filtered_pledges)
     return f"{attrition_rate:.1f}%"
 
 
 @app.callback(Output("active-donors-kpi", "children"),
               [Input("fiscal-year-dropdown", "value")])
 def update_active_donors(fiscal_year):
-    active_donors_count = count_active_donors(df_pledges_converted)
+    if not fiscal_year:
+        return "No data"
+
+    start_date, end_date = get_fiscal_year_range(fiscal_year)
+    filtered_pledges = df_pledges_converted[
+        (df_pledges_converted['pledge_starts_at'] >= start_date)
+        & (df_pledges_converted['pledge_starts_at'] <= end_date)]
+    active_donors_count = count_active_donors(filtered_pledges)
     return f"{active_donors_count:,}"
 
 
 @app.callback(Output("active-pledges-kpi", "children"),
               [Input("fiscal-year-dropdown", "value")])
 def update_active_pledges(fiscal_year):
-    active_pledges_count = count_active_pledges(df_pledges_converted)
+    if not fiscal_year:
+        return "No data"
+
+    start_date, end_date = get_fiscal_year_range(fiscal_year)
+    filtered_pledges = df_pledges_converted[
+        (df_pledges_converted['pledge_starts_at'] >= start_date)
+        & (df_pledges_converted['pledge_starts_at'] <= end_date)]
+    active_pledges_count = count_active_pledges(filtered_pledges)
     return f"{active_pledges_count:,}"
 
 
@@ -2026,7 +2048,8 @@ def update_active_pledges(fiscal_year):
               [Input("fiscal-year-dropdown", "value")])
 def update_chapter_arr_chart(fiscal_year):
     try:
-        chapter_arr_data = calculate_chapter_arr(df_pledges_converted)
+        chapter_arr_data = calculate_chapter_arr(df_pledges_converted,
+                                                 fiscal_year)
 
         if chapter_arr_data.empty:
             fig = go.Figure()
@@ -2083,12 +2106,10 @@ def update_money_moved_chart(fiscal_year):
     if not fiscal_year:
         # Return empty figure with same structure
         fig = make_subplots(specs=[[{"secondary_y": True}]])
-        fig.update_layout(
-            title_text='Money Moved by Month (No Data)',
-            plot_bgcolor='white',
-            paper_bgcolor='white',
-            height=400
-        )
+        fig.update_layout(title_text='Money Moved by Month (No Data)',
+                          plot_bgcolor='white',
+                          paper_bgcolor='white',
+                          height=400)
         return fig
 
     try:
@@ -2106,13 +2127,13 @@ def update_money_moved_chart(fiscal_year):
                 title_text=f'No data available for {fiscal_year}',
                 plot_bgcolor='white',
                 paper_bgcolor='white',
-                height=400
-            )
+                height=400)
             return fig
 
         # Group by month
         filtered_data['month'] = filtered_data['date'].dt.to_period('M')
-        monthly_data = filtered_data.groupby('month')['amount_usd'].sum().reset_index()
+        monthly_data = filtered_data.groupby(
+            'month')['amount_usd'].sum().reset_index()
         monthly_data['month'] = monthly_data['month'].dt.to_timestamp()
 
         # Calculate cumulative sum
@@ -2123,87 +2144,71 @@ def update_money_moved_chart(fiscal_year):
 
         # Add monthly bars
         fig.add_trace(
-            go.Bar(
-                x=monthly_data['month'],
-                y=monthly_data['amount_usd'],
-                name="Monthly Money Moved",
-                marker_color=COLORS['primary']
-            ),
+            go.Bar(x=monthly_data['month'],
+                   y=monthly_data['amount_usd'],
+                   name="Monthly Money Moved",
+                   marker_color=COLORS['primary']),
             secondary_y=False,
         )
 
         # Add cumulative line
         fig.add_trace(
-            go.Scatter(
-                x=monthly_data['month'],
-                y=monthly_data['cumulative'],
-                name="Cumulative Money Moved",
-                line=dict(color=COLORS['accent'], width=3),
-                mode='lines+markers'
-            ),
+            go.Scatter(x=monthly_data['month'],
+                       y=monthly_data['cumulative'],
+                       name="Cumulative Money Moved",
+                       line=dict(color=COLORS['accent'], width=3),
+                       mode='lines+markers'),
             secondary_y=True,
         )
 
         # Update layout
-        fig.update_layout(
-            title_text='Money Moved by Month',
-            plot_bgcolor='white',
-            paper_bgcolor='white',
-            hovermode="x unified",
-            legend=dict(
-                orientation="h",
-                yanchor="bottom",
-                y=1.02,
-                xanchor="center",
-                x=0.5
-            ),
-            height=400,
-            margin=dict(l=40, r=40, t=80, b=40)
-        )
+        fig.update_layout(title_text='Money Moved by Month',
+                          plot_bgcolor='white',
+                          paper_bgcolor='white',
+                          hovermode="x unified",
+                          legend=dict(orientation="h",
+                                      yanchor="bottom",
+                                      y=1.02,
+                                      xanchor="center",
+                                      x=0.5),
+                          height=400,
+                          margin=dict(l=40, r=40, t=80, b=40))
 
         # Update y-axes with grid
-        fig.update_yaxes(
-            title_text="Monthly Money Moved (USD)",
-            secondary_y=False,
-            tickprefix='$',
-            tickformat=',.0f',
-            gridcolor='lightgray',
-            gridwidth=1,
-            showgrid=True,
-            zeroline=True,
-            zerolinecolor='lightgray',
-            zerolinewidth=1
-        )
-        
-        fig.update_yaxes(
-            title_text="Cumulative Money Moved (USD)",
-            secondary_y=True,
-            tickprefix='$',
-            tickformat=',.0f',
-            gridcolor='lightgray',
-            gridwidth=1,
-            showgrid=True
-        )
+        fig.update_yaxes(title_text="Monthly Money Moved (USD)",
+                         secondary_y=False,
+                         tickprefix='$',
+                         tickformat=',.0f',
+                         gridcolor='lightgray',
+                         gridwidth=1,
+                         showgrid=True,
+                         zeroline=True,
+                         zerolinecolor='lightgray',
+                         zerolinewidth=1)
+
+        fig.update_yaxes(title_text="Cumulative Money Moved (USD)",
+                         secondary_y=True,
+                         tickprefix='$',
+                         tickformat=',.0f',
+                         gridcolor='lightgray',
+                         gridwidth=1,
+                         showgrid=True)
 
         # Update x-axis with grid
-        fig.update_xaxes(
-            title_text="Month",
-            gridcolor='lightgray',
-            gridwidth=1,
-            showgrid=True
-        )
+        fig.update_xaxes(title_text="Month",
+                         gridcolor='lightgray',
+                         gridwidth=1,
+                         showgrid=True)
 
         return fig
 
     except Exception as e:
         print(f"Error in money moved chart: {e}")
         fig = make_subplots(specs=[[{"secondary_y": True}]])
-        fig.update_layout(
-            title_text='Error loading chart',
-            plot_bgcolor='white',
-            paper_bgcolor='white',
-            height=400
-        )
+        fig.update_layout(title_text='Error loading chart',
+                          plot_bgcolor='white',
+                          paper_bgcolor='white',
+                          height=400)
         return fig
 
 
@@ -2243,11 +2248,9 @@ def update_mm_kpis(fiscal_year):
 def update_mm_breakdown_charts(fiscal_year):
     if not fiscal_year:
         empty_fig = go.Figure()
-        empty_fig.update_layout(
-            title="No data available",
-            plot_bgcolor='white',
-            paper_bgcolor='white'
-        )
+        empty_fig.update_layout(title="No data available",
+                                plot_bgcolor='white',
+                                paper_bgcolor='white')
         return empty_fig, empty_fig, empty_fig, empty_fig, empty_fig
 
     start_date, end_date = get_fiscal_year_range(fiscal_year)
@@ -2266,15 +2269,12 @@ def update_mm_breakdown_charts(fiscal_year):
             values='amount_usd',
             names='payment_platform',
             title="Money Moved by Platform",
-            color_discrete_sequence=px.colors.qualitative.Set3
-        )
+            color_discrete_sequence=px.colors.qualitative.Set3)
         platform_fig.update_traces(textinfo='percent+label')
-        platform_fig.update_layout(
-            showlegend=True,
-            legend_title="Payment Platform",
-            plot_bgcolor='white',
-            paper_bgcolor='white'
-        )
+        platform_fig.update_layout(showlegend=True,
+                                   legend_title="Payment Platform",
+                                   plot_bgcolor='white',
+                                   paper_bgcolor='white')
 
         # 2. Chapter/Source Breakdown (using Merged_INNER)
         filtered_merged = Merged_INNER[(Merged_INNER['date'] >= start_date) & (
@@ -2283,32 +2283,24 @@ def update_mm_breakdown_charts(fiscal_year):
         chapter_data = filtered_merged.groupby(
             'chapter_type')['amount_usd_y'].sum().reset_index()
         chapter_data = chapter_data.sort_values('amount_usd_y', ascending=True)
-        source_fig = px.bar(
-            chapter_data,
-            x='amount_usd_y',
-            y='chapter_type',
-            orientation='h',
-            title="Money Moved by Chapter Type",
-            color_discrete_sequence=[COLORS['primary']]
-        )
-        source_fig.update_layout(
-            xaxis_title="Amount (USD)",
-            yaxis_title="Chapter Type",
-            plot_bgcolor='white',
-            paper_bgcolor='white'
-        )
-        source_fig.update_xaxes(
-            tickprefix="$",
-            tickformat=",",
-            gridcolor='lightgray',
-            gridwidth=1,
-            showgrid=True
-        )
-        source_fig.update_yaxes(
-            gridcolor='lightgray',
-            gridwidth=1,
-            showgrid=True
-        )
+        source_fig = px.bar(chapter_data,
+                            x='amount_usd_y',
+                            y='chapter_type',
+                            orientation='h',
+                            title="Money Moved by Chapter Type",
+                            color_discrete_sequence=[COLORS['primary']])
+        source_fig.update_layout(xaxis_title="Amount (USD)",
+                                 yaxis_title="Chapter Type",
+                                 plot_bgcolor='white',
+                                 paper_bgcolor='white')
+        source_fig.update_xaxes(tickprefix="$",
+                                tickformat=",",
+                                gridcolor='lightgray',
+                                gridwidth=1,
+                                showgrid=True)
+        source_fig.update_yaxes(gridcolor='lightgray',
+                                gridwidth=1,
+                                showgrid=True)
 
         # 3. Recurring vs One-Time (using Merged_INNER)
         filtered_merged['payment_type'] = filtered_merged['frequency'].map(
@@ -2320,38 +2312,29 @@ def update_mm_breakdown_charts(fiscal_year):
             values='amount_usd_y',
             names='payment_type',
             title="Recurring vs One-Time Donations",
-            color_discrete_sequence=px.colors.qualitative.Set2
-        )
+            color_discrete_sequence=px.colors.qualitative.Set2)
         recurring_fig.update_traces(textinfo='percent+label')
-        recurring_fig.update_layout(
-            showlegend=True,
-            legend_title="Payment Type",
-            plot_bgcolor='white',
-            paper_bgcolor='white'
-        )
+        recurring_fig.update_layout(showlegend=True,
+                                    legend_title="Payment Type",
+                                    plot_bgcolor='white',
+                                    paper_bgcolor='white')
 
         # 4. Platform Performance Heatmap (using df_payments_converted)
         df_heatmap = filtered_payments.copy()
         df_heatmap['month'] = df_heatmap['date'].dt.strftime('%Y-%m')
-        heatmap_data = df_heatmap.pivot_table(
-            values='amount_usd',
-            index='month',
-            columns='payment_platform',
-            aggfunc='sum'
-        ).fillna(0)
+        heatmap_data = df_heatmap.pivot_table(values='amount_usd',
+                                              index='month',
+                                              columns='payment_platform',
+                                              aggfunc='sum').fillna(0)
 
-        heatmap_fig = px.imshow(
-            heatmap_data,
-            title="Platform Performance Over Time",
-            color_continuous_scale="RdYlBu",
-            aspect="auto"
-        )
-        heatmap_fig.update_layout(
-            xaxis_title="Payment Platform",
-            yaxis_title="Month",
-            plot_bgcolor='white',
-            paper_bgcolor='white'
-        )
+        heatmap_fig = px.imshow(heatmap_data,
+                                title="Platform Performance Over Time",
+                                color_continuous_scale="RdYlBu",
+                                aspect="auto")
+        heatmap_fig.update_layout(xaxis_title="Payment Platform",
+                                  yaxis_title="Month",
+                                  plot_bgcolor='white',
+                                  paper_bgcolor='white')
 
         # 5. Money Moved Trends
         df = filtered_payments.copy()
@@ -2363,72 +2346,55 @@ def update_mm_breakdown_charts(fiscal_year):
         trends_fig = make_subplots(specs=[[{"secondary_y": True}]])
 
         # Total Money Moved Bars
-        trends_fig.add_trace(
-            go.Bar(
-                x=monthly_total['month'],
-                y=monthly_total['amount_usd'],
-                name="Monthly Total",
-                marker_color=COLORS['primary']
-            ),
-            secondary_y=False
-        )
+        trends_fig.add_trace(go.Bar(x=monthly_total['month'],
+                                    y=monthly_total['amount_usd'],
+                                    name="Monthly Total",
+                                    marker_color=COLORS['primary']),
+                             secondary_y=False)
 
         # Cumulative Line
-        trends_fig.add_trace(
-            go.Scatter(
-                x=monthly_total['month'],
-                y=monthly_total['cumulative'],
-                name="Cumulative Total",
-                line=dict(color=COLORS['accent'], width=3)
-            ),
-            secondary_y=True
-        )
+        trends_fig.add_trace(go.Scatter(x=monthly_total['month'],
+                                        y=monthly_total['cumulative'],
+                                        name="Cumulative Total",
+                                        line=dict(color=COLORS['accent'],
+                                                  width=3)),
+                             secondary_y=True)
 
-        trends_fig.update_layout(
-            title="Money Moved Trends",
-            height=400,
-            hovermode="x unified",
-            showlegend=True,
-            plot_bgcolor='white',
-            paper_bgcolor='white',
-            xaxis_title="Month",
-            yaxis_title="Monthly Total (USD)",
-            yaxis2_title="Cumulative Total (USD)"
-        )
+        trends_fig.update_layout(title="Money Moved Trends",
+                                 height=400,
+                                 hovermode="x unified",
+                                 showlegend=True,
+                                 plot_bgcolor='white',
+                                 paper_bgcolor='white',
+                                 xaxis_title="Month",
+                                 yaxis_title="Monthly Total (USD)",
+                                 yaxis2_title="Cumulative Total (USD)")
 
         # Update axes formatting
-        trends_fig.update_xaxes(
-            gridcolor='lightgray',
-            gridwidth=1,
-            showgrid=True
-        )
-        trends_fig.update_yaxes(
-            tickprefix="$",
-            tickformat=",",
-            gridcolor='lightgray',
-            gridwidth=1,
-            showgrid=True,
-            secondary_y=False
-        )
-        trends_fig.update_yaxes(
-            tickprefix="$",
-            tickformat=",",
-            gridcolor='lightgray',
-            gridwidth=1,
-            showgrid=True,
-            secondary_y=True
-        )
+        trends_fig.update_xaxes(gridcolor='lightgray',
+                                gridwidth=1,
+                                showgrid=True)
+        trends_fig.update_yaxes(tickprefix="$",
+                                tickformat=",",
+                                gridcolor='lightgray',
+                                gridwidth=1,
+                                showgrid=True,
+                                secondary_y=False)
+        trends_fig.update_yaxes(tickprefix="$",
+                                tickformat=",",
+                                gridcolor='lightgray',
+                                gridwidth=1,
+                                showgrid=True,
+                                secondary_y=True)
 
         return trends_fig, platform_fig, source_fig, recurring_fig, heatmap_fig
 
     except Exception as e:
         print(f"Error in update_mm_breakdown_charts: {e}")
         empty_fig = go.Figure()
-        empty_fig.update_layout(
-            title=f"Error: {str(e)}",
-            plot_bgcolor='white',
-            paper_bgcolor='white'
-        )
+        empty_fig.update_layout(title=f"Error: {str(e)}",
+                                plot_bgcolor='white',
+                                paper_bgcolor='white')
         return empty_fig, empty_fig, empty_fig, empty_fig, empty_fig
 
 
@@ -2451,65 +2417,61 @@ def update_pledge_kpis(fiscal_year, month_range):
     try:
         # Get fiscal year range
         start_date, end_date = get_fiscal_year_range(fiscal_year)
-        
+
         # Get selected month range (0-based to 1-based)
         start_month, end_month = [m + 1 for m in month_range]
-        
+
         # Create copy of pledges data
         pledges = df_pledges_converted.copy()
-        
+
         # First filter by fiscal year
         mask_fiscal_year = (pledges['pledge_starts_at'] >= start_date) & \
                           (pledges['pledge_starts_at'] <= end_date)
         pledges = pledges[mask_fiscal_year]
-        
+
         # Convert dates to fiscal months (Jul=1, Jun=12)
         pledges['fiscal_month'] = pledges['pledge_starts_at'].apply(
-            lambda x: (x.month - 6) % 12 + 1 if x.month >= 7 else x.month + 6
-        )
-        
+            lambda x: (x.month - 6) % 12 + 1 if x.month >= 7 else x.month + 6)
+
         # Apply month range filter
         mask_months = (pledges['fiscal_month'] >= start_month) & \
                      (pledges['fiscal_month'] <= end_month)
         pledges = pledges[mask_months]
 
         # Calculate pledge counts
-        total_pledges = pledges[
-            pledges['pledge_status'].isin(['Active donor', 'Pledged donor'])
-        ].shape[0]
-        
-        active_pledges = pledges[
-            pledges['pledge_status'] == 'Active donor'
-        ].shape[0]
-        
-        future_pledges = pledges[
-            pledges['pledge_status'] == 'Pledged donor'
-        ].shape[0]
+        total_pledges = pledges[pledges['pledge_status'].isin(
+            ['Active donor', 'Pledged donor'])].shape[0]
+
+        active_pledges = pledges[pledges['pledge_status'] ==
+                                 'Active donor'].shape[0]
+
+        future_pledges = pledges[pledges['pledge_status'] ==
+                                 'Pledged donor'].shape[0]
 
         # Calculate ARR values
         def calculate_arr(df, status):
             df_filtered = df[df['pledge_status'] == status].copy()
             df_filtered['multiplier'] = df_filtered['frequency'].map({
-                'monthly': 12,
-                'quarterly': 4,
-                'annually': 1,
-                'One-Time': 1
+                'monthly':
+                12,
+                'quarterly':
+                4,
+                'annually':
+                1,
+                'One-Time':
+                1
             }).fillna(1)
-            return (df_filtered['amount_usd'] * df_filtered['multiplier']).sum()
+            return (df_filtered['amount_usd'] *
+                    df_filtered['multiplier']).sum()
 
         active_arr = calculate_arr(pledges, 'Active donor')
         future_arr = calculate_arr(pledges, 'Pledged donor')
         total_arr = active_arr + future_arr
 
         # Format output values
-        return (
-            f"{total_pledges:,}",
-            f"{active_pledges:,}", 
-            f"{future_pledges:,}",
-            f"${total_arr:,.2f}",
-            f"${active_arr:,.2f}",
-            f"${future_arr:,.2f}"
-        )
+        return (f"{total_pledges:,}", f"{active_pledges:,}",
+                f"{future_pledges:,}", f"${total_arr:,.2f}",
+                f"${active_arr:,.2f}", f"${future_arr:,.2f}")
 
     except Exception as e:
         print(f"Error in update_pledge_kpis: {e}")
@@ -2709,36 +2671,79 @@ def update_pledge_charts(fiscal_year, month_range):
 
 # Add this function before the callback
 def prepare_dashboard_context(df_payments, df_pledges, fiscal_year=None):
-    """Prepare context about the dashboard data for AI analysis"""
+    """Prepare comprehensive context about the dashboard data for AI analysis"""
     try:
-        context = {
-            'total_money_moved': calculate_money_moved(df_payments, fiscal_year),
-            'total_active_donors': count_active_donors(df_pledges),
-            'total_active_pledges': count_active_pledges(df_pledges),
-            'attrition_rate': calculate_pledge_attrition_rate(df_pledges),
-            'arr_by_channel': calculate_arr_by_channel(df_pledges).to_dict(),
-            'available_years': available_fiscal_years
+        # Get fiscal year range
+        if fiscal_year:
+            start_date, end_date = get_fiscal_year_range(fiscal_year)
+            filtered_payments = df_payments[(df_payments['date'] >= start_date) & 
+                                         (df_payments['date'] <= end_date)]
+            filtered_pledges = df_pledges[(df_pledges['pledge_starts_at'] >= start_date) & 
+                                        (df_pledges['pledge_starts_at'] <= end_date)]
+        else:
+            filtered_payments = df_payments
+            filtered_pledges = df_pledges
+
+        # Objective & Key Metrics
+        key_metrics = {
+            'total_money_moved': calculate_money_moved(filtered_payments, fiscal_year),
+            'counterfactual_mm': calculate_counterfactual_mm(filtered_payments, fiscal_year),
+            'active_arr': calculate_arr_by_channel(filtered_pledges, fiscal_year),
+            'attrition_rate': calculate_pledge_attrition_rate(filtered_pledges),
+            'active_donors': count_active_donors(filtered_pledges),
+            'active_pledges': count_active_pledges(filtered_pledges)
         }
-        
+
+        # Money Moved Analysis
+        money_moved = {
+            'total_mm': calculate_money_moved(filtered_payments, fiscal_year),
+            'monthly_avg': key_metrics['total_money_moved'] / 12 if fiscal_year else 0,
+            'platform_distribution': filtered_payments.groupby('payment_platform')['amount_usd'].sum().to_dict(),
+            'recurring_vs_onetime': filtered_pledges.groupby('frequency')['amount_usd'].sum().to_dict()
+        }
+
+        # Pledge Performance
+        pledge_metrics = {
+            'total_pledges': filtered_pledges[filtered_pledges['pledge_status'].isin(['Active donor', 'Pledged donor'])].shape[0],
+            'active_pledges': filtered_pledges[filtered_pledges['pledge_status'] == 'Active donor'].shape[0],
+            'future_pledges': filtered_pledges[filtered_pledges['pledge_status'] == 'Pledged donor'].shape[0],
+            'chapter_performance': filtered_pledges.groupby('chapter_type')['amount_usd'].sum().to_dict()
+        }
+
         return f"""
-        Dashboard Context:
-        - Total Money Moved: ${context['total_money_moved']:,.2f}
-        - Active Donors: {context['total_active_donors']}
-        - Active Pledges: {context['total_active_pledges']}
-        - Attrition Rate: {context['attrition_rate']:.1f}%
-        - Available Fiscal Years: {', '.join(context['available_years'])}
+        Dashboard Context for {fiscal_year if fiscal_year else 'All Time'}:
+
+        Key Metrics:
+        - Total Money Moved: ${key_metrics['total_money_moved']:,.2f}
+        - Counterfactual Money Moved: ${key_metrics['counterfactual_mm']:,.2f}
+        - Active ARR: ${key_metrics['active_arr']:,.2f}
+        - Attrition Rate: {key_metrics['attrition_rate']:.1f}%
+        - Active Donors: {key_metrics['active_donors']}
+        - Active Pledges: {key_metrics['active_pledges']}
+
+        Money Moved Analysis:
+        - Total Money Moved: ${money_moved['total_mm']:,.2f}
+        - Monthly Average: ${money_moved['monthly_avg']:,.2f}
+        - Platform Distribution: {money_moved['platform_distribution']}
+        - Payment Types: {money_moved['recurring_vs_onetime']}
+
+        Pledge Performance:
+        - Total Pledges: {pledge_metrics['total_pledges']}
+        - Active Pledges: {pledge_metrics['active_pledges']}
+        - Future Pledges: {pledge_metrics['future_pledges']}
+        - Chapter Performance: {pledge_metrics['chapter_performance']}
+
+        Available Fiscal Years: {', '.join(available_fiscal_years)}
         """
     except Exception as e:
         return f"Error preparing context: {str(e)}"
 
+
 # Update the AI Insights callback
 @app.callback(
-    Output('ai-response', 'children'),
-    [Input('submit-question', 'n_clicks')],
-    [
-        State('question-input', 'value'),
-        State('fiscal-year-dropdown', 'value')
-    ]
+    Output('ai-response', 'children'), [Input('submit-question', 'n_clicks')],
+    [State('question-input', 'value'),
+     State("fiscal-year-dropdown", "value")]
 )
 def get_ai_insights(n_clicks, question, current_fiscal_year):
     if not n_clicks or not question:
@@ -2746,38 +2751,53 @@ def get_ai_insights(n_clicks, question, current_fiscal_year):
 
     try:
         # Prepare context about the dashboard data
-        dashboard_context = prepare_dashboard_context(
-            df_payments_converted,
-            df_pledges_converted,
-            current_fiscal_year
-        )
-        
+        dashboard_context = prepare_dashboard_context(df_payments_converted,
+                                                      df_pledges_converted,
+                                                      current_fiscal_year)
+
         # Construct the prompt with context
         prompt = f"""
         You are an AI analyst for the One for the World (OFTW) charity dashboard. 
         Use the following context to answer questions about the dashboard data:
-        
+
         {dashboard_context}
-        
+
         Question: {question}
-        
+
         Please provide a clear, concise analysis based on the available data. 
         If you need specific data that's not available in the context, please mention that.
         """
-        
+
         # Generate response using the model
-        model = genai.GenerativeModel(model_name="models/gemini-1.5-pro")
-        response = model.generate_content(prompt)
-        
+        model = genai.GenerativeModel(
+            model_name="gemini-1.5-pro",
+            generation_config=generation_config,
+            safety_settings=safety_settings
+        )
+
+        # Add specific instructions for financial analysis
+        enhanced_prompt = f"""
+        {prompt}
+
+        Please analyze the data and provide:
+        1. Key observations about the metrics
+        2. Comparison with targets where available
+        3. Actionable insights based on the trends
+
+        Format the response in a clear, structured way.
+        """
+
+        response = model.generate_content(enhanced_prompt)
+
         # Check if response was blocked
         if response.prompt_feedback and response.prompt_feedback.block_reason:
             return f"Response was blocked due to safety concerns: {response.prompt_feedback.block_reason}"
-        
-        # Return the response text
+
+        # Return the response text with formatting
         if response.text:
-            return response.text
+            return response.text.replace('\n', '<br>')
         else:
-            return "No response generated. Please try a different question."
+            return "No response generated. Please try rephrasing your question."
 
     except Exception as e:
         error_msg = str(e)
@@ -2787,6 +2807,16 @@ def get_ai_insights(n_clicks, question, current_fiscal_year):
             return "Error: Authentication failed. Please check your API key."
         else:
             return f"Error: {error_msg}"
+
+
+def analyze_dashboard_metrics(question, df_payments, df_pledges, fiscal_year):
+    """Analyzes dashboard metrics and answers a given question using prepared context."""
+    context = prepare_dashboard_context(df_payments, df_pledges, fiscal_year)
+    # Implement your logic here to analyze the context and answer the question.
+    # You can use libraries like spaCy or transformers for NLP tasks.
+    # This is a placeholder, replace with actual analysis.
+    return f"Analysis for question '{question}' based on context:\n{context}"
+
 
 
 if __name__ == '__main__':
