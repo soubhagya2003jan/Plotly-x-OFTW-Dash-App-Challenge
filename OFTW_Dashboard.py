@@ -327,7 +327,7 @@ try:
                            on='pledge_id',
                            how='left')
 
-    # Filter out discretionary fund and operating costs for counterfactual calculations
+    
     counterfactual_df = df_payments_converted[
         ~df_payments_converted['portfolio'].isin([
             'One for the World Discretionary Fund',
@@ -351,7 +351,7 @@ try:
 
 except Exception as e:
     print(f"Error loading or processing data: {e}")
-    # Keep the defaults for global variables
+   
 
 app.layout = html.Div(
     [
@@ -2671,11 +2671,11 @@ def update_pledge_charts(fiscal_year, month_range):
         return empty_fig, empty_fig, empty_fig, empty_fig
 
 
-# Add this function before the callback
+
 def prepare_dashboard_context(df_payments, df_pledges, fiscal_year=None):
     """Prepare comprehensive context about the dashboard data for AI analysis"""
     try:
-        # Get fiscal year range
+        
         if fiscal_year:
             start_date, end_date = get_fiscal_year_range(fiscal_year)
             filtered_payments = df_payments[(df_payments['date'] >= start_date) & 
@@ -2791,15 +2791,15 @@ def get_ai_insights(n_clicks, question, current_fiscal_year):
 
         response = model.generate_content(enhanced_prompt)
 
-        # Check if response was blocked
+        
         if response.prompt_feedback and response.prompt_feedback.block_reason:
             return f"Response was blocked due to safety concerns: {response.prompt_feedback.block_reason}"
 
         # Return the response text with formatting
         if response.text:
-            formatted_text = response.text.replace('**', '').replace('*', '•')  # Convert markdown to bullet points
-            formatted_text = formatted_text.replace('<br><br>', '\n\n')  # Convert double breaks to newlines
-            formatted_text = formatted_text.replace('<br>', '\n')  # Convert single breaks to newlines
+            formatted_text = response.text.replace('**', '').replace('*', '•')  
+            formatted_text = formatted_text.replace('<br><br>', '\n\n')  
+            formatted_text = formatted_text.replace('<br>', '\n')  
             return formatted_text
         else:
             return "No response generated. Please try rephrasing your question."
@@ -2817,9 +2817,7 @@ def get_ai_insights(n_clicks, question, current_fiscal_year):
 def analyze_dashboard_metrics(question, df_payments, df_pledges, fiscal_year):
     """Analyzes dashboard metrics and answers a given question using prepared context."""
     context = prepare_dashboard_context(df_payments, df_pledges, fiscal_year)
-    # Implement your logic here to analyze the context and answer the question.
-    # You can use libraries like spaCy or transformers for NLP tasks.
-    # This is a placeholder, replace with actual analysis.
+
     return f"Analysis for question '{question}' based on context:\n{context}"
 
 
